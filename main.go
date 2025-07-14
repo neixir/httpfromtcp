@@ -3,20 +3,42 @@ package main
 import (
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"strings"
 )
 
 func main() {
-	// Obrim el fitxer
-	f, err := os.Open("messages.txt")
+	// Use net.Listen to set up a TCP listener on port :42069.
+	l, err := net.Listen("tcp", ":42069") // 127.0.0.1
 	if err != nil {
 		fmt.Println(err.Error())
 		os.Exit(1)
 	}
 
-	for line := range getLinesChannel(f) {
-		fmt.Printf("read: %s\n", line)
+	// Don't forget to .Close() the listener when the program exits.
+	defer l.Close()
+
+	// With the listener created, start an infinite loop that:
+	for {
+		// Starts by waiting to .Accept a connection.
+		conn, err := l.Accept()
+		if err != nil {
+			fmt.Println(err.Error())
+			os.Exit(1)
+		}
+
+		// Prints a message to the console that a connection has been accepted.
+		fmt.Println("Connection accepted")
+
+		// Uses our getLinesChannel function to read lines from the connection.
+		for line := range getLinesChannel(conn) {
+			// Prints each line to the console with no additional formatting (aside from a terminating newline).
+			fmt.Println(line)
+		}
+
+		// Prints a message to the console that the connection has been closed when the channel is closed.
+		fmt.Println("Connection closed")
 	}
 
 }
