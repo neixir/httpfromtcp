@@ -18,6 +18,8 @@ func (h Headers) Parse(data []byte) (n int, done bool, err error) {
 
 	// If you do find a CRLF, but it's at the start of the data, you've found the end of the headers,
 	// so return the proper values immediately.
+	// Note: The Parse function should only return done=true when the data starts with a CRLF,
+	// which can't happen when it finds a new key/value pair.
 	parts := strings.Split(string(data), "\r\n")
 	if parts[0] == "" {
 		return 2, true, nil // n=2 per CRLF
@@ -42,7 +44,9 @@ func (h Headers) Parse(data []byte) (n int, done bool, err error) {
 		return 0, false, fmt.Errorf("malformed header line")
 	}
 
+	// Remove any extra whitespace from the key and value
 	key = strings.ToLower(strings.TrimSpace(key))
+	value = strings.TrimSpace(value)
 
 	// Return an error if the key contains an invalid character.
 	// Valid: A-Z, a-z, 0-9 i "!, #, $, %, &, ', *, +, -, ., ^, _, `, |, ~"
@@ -59,14 +63,18 @@ func (h Headers) Parse(data []byte) (n int, done bool, err error) {
 	}
 
 	// Assuming the format was valid (if it isn't return an error),
-	// add the key/value pair to the Headers map and return the number of bytes consumed.
-	// Note: The Parse function should only return done=true when the data starts with a CRLF,
-	// which can't happen when it finds a new key/value pair.
-	// (pero abans: Remove any extra whitespace from the key and value)
-	//key = strings.ToLower(strings.TrimSpace(key))
-	value = strings.TrimSpace(value)
-	h[key] = value
-	consumed := len(fieldLine) + 2 // per CRLF
+	// add the key/value pair to the Headers map
+	// If a header key already exists in the map before inserting one,
+	// append the new value to the existing value, separated by a comma.
+	current, ok := h[key]
+	if ok {
+		h[key] = fmt.Sprintf("%s, %s", current, value)
+	} else {
+		h[key] = value
+	}
+
+	// Return the number of bytes consumed
+	consumed := len(fieldLine) + 2 // +2 per CRLF
 
 	// It's important to understand that this function will be called over and over
 	// until all the headers are parsed, and it can only parse one key/value pair at a time.
