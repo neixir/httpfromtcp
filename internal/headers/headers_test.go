@@ -14,7 +14,7 @@ func TestHeadersParse(t *testing.T) {
 	n, done, err := headers.Parse(data)
 	require.NoError(t, err)
 	require.NotNil(t, headers)
-	assert.Equal(t, "localhost:42069", headers["Host"])
+	assert.Equal(t, "localhost:42069", headers["host"])
 	assert.Equal(t, 23, n)
 	assert.False(t, done)
 
@@ -26,15 +26,13 @@ func TestHeadersParse(t *testing.T) {
 	assert.Equal(t, 0, n)
 	assert.False(t, done)
 
-	// Add more tests
-
 	// "Valid single header with extra whitespace"
 	headers = NewHeaders()
 	data = []byte("       Host: localhost:42069       \r\n\r\n")
 	n, done, err = headers.Parse(data)
 	require.NoError(t, err)
 	require.NotNil(t, headers)
-	assert.Equal(t, "localhost:42069", headers["Host"])
+	assert.Equal(t, "localhost:42069", headers["host"])
 	assert.Equal(t, 37, n)
 	assert.False(t, done)
 
@@ -47,8 +45,8 @@ func TestHeadersParse(t *testing.T) {
 	_, done, err = headers.Parse(data2)
 	require.NoError(t, err)
 	require.NotNil(t, headers)
-	assert.Equal(t, "localhost:42069", headers["Host"])
-	assert.Equal(t, "*/*", headers["Accept"])
+	assert.Equal(t, "localhost:42069", headers["host"])
+	assert.Equal(t, "*/*", headers["accept"])
 	assert.False(t, done)
 
 	// "Valid done"
@@ -59,5 +57,22 @@ func TestHeadersParse(t *testing.T) {
 	require.NotNil(t, headers)
 	assert.Equal(t, 2, n)
 	assert.True(t, done)
+
+	// Capital letters in key
+	headers = NewHeaders()
+	data = []byte("Host: localhost:42069\r\n")
+	_, done, err = headers.Parse(data)
+	require.NoError(t, err)
+	require.NotNil(t, headers)
+	assert.Equal(t, "localhost:42069", headers["host"])
+	assert.False(t, done)
+
+	// Invalid character in header key
+	headers = NewHeaders()
+	data = []byte("H@st: localhost:42069\r\n")
+	_, done, err = headers.Parse(data)
+	require.Error(t, err)
+	assert.Equal(t, 2, n)
+	assert.False(t, done)
 
 }

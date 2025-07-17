@@ -42,12 +42,28 @@ func (h Headers) Parse(data []byte) (n int, done bool, err error) {
 		return 0, false, fmt.Errorf("malformed header line")
 	}
 
+	key = strings.ToLower(strings.TrimSpace(key))
+
+	// Return an error if the key contains an invalid character.
+	// Valid: A-Z, a-z, 0-9 i "!, #, $, %, &, ', *, +, -, ., ^, _, `, |, ~"
+	validChars := "!#$%&'*+-.^_`|~"
+	for _, c := range key {
+		isUpper := c >= 'A' && c <= 'Z'
+		isLower := c >= 'a' && c <= 'z'
+		isDigit := c >= '0' && c <= '9'
+		isSpecial := strings.Contains(validChars, string(c))
+
+		if !isUpper && !isLower && !isDigit && !isSpecial {
+			return 0, false, fmt.Errorf("invalid character in field name")
+		}
+	}
+
 	// Assuming the format was valid (if it isn't return an error),
 	// add the key/value pair to the Headers map and return the number of bytes consumed.
 	// Note: The Parse function should only return done=true when the data starts with a CRLF,
 	// which can't happen when it finds a new key/value pair.
 	// (pero abans: Remove any extra whitespace from the key and value)
-	key = strings.TrimSpace(key)
+	//key = strings.ToLower(strings.TrimSpace(key))
 	value = strings.TrimSpace(value)
 	h[key] = value
 	consumed := len(fieldLine) + 2 // per CRLF
@@ -61,5 +77,4 @@ func (h Headers) Parse(data []byte) (n int, done bool, err error) {
 // Aquesta funcio s'utilitza als test pero no explica com ha de ser. A veure...
 func NewHeaders() Headers {
 	return make(Headers)
-	// return make([]Headers, 10)
 }
