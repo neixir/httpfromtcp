@@ -72,8 +72,8 @@ func TestRequestLineParse(t *testing.T) {
 	assert.Equal(t, "/coffee", r.RequestLine.RequestTarget)
 	assert.Equal(t, "1.1", r.RequestLine.HttpVersion)
 
-	// Invalid method (out of order) Request line
-	// Potser permetre nomes GET, POST, PUT, DELETE, UPDATE...
+	// TODO Invalid method (out of order) Request line
+	// TODO Potser permetre nomes GET, POST, PUT, DELETE, UPDATE...
 
 	// Invalid version in Request line
 	reader = &chunkReader{
@@ -85,6 +85,38 @@ func TestRequestLineParse(t *testing.T) {
 
 	_, err = RequestFromReader(reader)
 	require.Error(t, err)
+}
+
+func TestHeadersParse(t *testing.T) {
+	/* HEADERS */
+	// Test: Standard Headers
+	reader := &chunkReader{
+		data:            "GET / HTTP/1.1\r\nHost: localhost:42069\r\nUser-Agent: curl/7.81.0\r\nAccept: */*\r\n\r\n",
+		numBytesPerRead: 3,
+	}
+	r, err := RequestFromReader(reader)
+	require.NoError(t, err)
+	require.NotNil(t, r)
+	assert.Equal(t, "localhost:42069", r.Headers["host"])
+	assert.Equal(t, "curl/7.81.0", r.Headers["user-agent"])
+	assert.Equal(t, "*/*", r.Headers["accept"])
+
+	// Test: Malformed Header
+	reader = &chunkReader{
+		data:            "GET / HTTP/1.1\r\nHost localhost:42069\r\n\r\n",
+		numBytesPerRead: 3,
+	}
+	r, err = RequestFromReader(reader)
+	require.Error(t, err)
+
+	// Add some more cases of your own to test for various edge cases with the headers. Here are the names of some of my additional test cases:
+
+	// "Standard Headers"
+	// "Empty Headers"
+	// "Malformed Header"
+	// "Duplicate Headers"
+	// "Case Insensitive Headers"
+	// "Missing End of Headers"
 
 }
 

@@ -20,18 +20,25 @@ func (h Headers) Parse(data []byte) (n int, done bool, err error) {
 	// so return the proper values immediately.
 	// Note: The Parse function should only return done=true when the data starts with a CRLF,
 	// which can't happen when it finds a new key/value pair.
-	parts := strings.Split(string(data), "\r\n")
-	if parts[0] == "" {
-		return 2, true, nil // n=2 per CRLF
+	i := strings.Index(string(data), "\r\n")
+	if i == -1 {
+		return 0, false, nil // Wait for more data!
+	}
+
+	fieldLine := string(data[:i])
+
+	// Si es el final dels headers trobarem \r\n\r\n i l'element sera en blanc, sortim
+	if fieldLine == "" {
+		return 2, true, nil // consume just the \r\n
 	}
 
 	// En aquest punt ja tenim una linia sencera
-	fieldLine := parts[0]
+	consumed := 0
 
 	// Busquem el primer ":" per dividir
-	i := strings.Index(fieldLine, ":")
+	i = strings.Index(fieldLine, ":")
 	if i < 0 {
-		return 0, false, fmt.Errorf("malformed header line")
+		return 0, false, fmt.Errorf("malformed header line [:]")
 	}
 
 	key := fieldLine[:i]     // field-name
@@ -74,7 +81,7 @@ func (h Headers) Parse(data []byte) (n int, done bool, err error) {
 	}
 
 	// Return the number of bytes consumed
-	consumed := len(fieldLine) + 2 // +2 per CRLF
+	consumed += len(fieldLine) + 2 // +2 per CRLF
 
 	// It's important to understand that this function will be called over and over
 	// until all the headers are parsed, and it can only parse one key/value pair at a time.

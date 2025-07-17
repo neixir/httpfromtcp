@@ -4,18 +4,22 @@ import (
 	"fmt"
 	"io"
 	"strings"
+
+	"github.com/neixir/httpfromtcp/internal/headers"
 )
 
 // type ParserState int
 const bufferSize = 8
 
 const (
-	StateInitialized int = iota
-	StateDone
+	requestStateInitialized int = iota
+	requestStateDone
+	requestStateParsingHeaders
 )
 
 type Request struct {
 	RequestLine RequestLine
+	Headers     headers.Headers
 	State       int
 }
 
@@ -38,14 +42,12 @@ func RequestFromReader(reader io.Reader) (*Request, error) {
 
 	// Create a new Request struct and set the state to "initialized".
 	r := Request{
-		State: StateInitialized,
+		State:   requestStateInitialized,
+		Headers: headers.Headers{},
 	}
 
 	// While the state of the parser is not "done":
-	for {
-		if r.State == StateDone {
-			break
-		}
+	for r.State != requestStateDone {
 
 		// If the buffer is full (we've read data into the entire buffer), grow it.
 		// Create a new slice that's twice the size and copy the old data into the new slice.
@@ -60,7 +62,7 @@ func RequestFromReader(reader io.Reader) (*Request, error) {
 
 		// If you hit the end of the reader (io.EOF) set the state to "done" and break out of the loop.
 		if err == io.EOF {
-			r.State = StateDone
+			r.State = requestStateDone
 			break
 		}
 
@@ -93,12 +95,12 @@ func parseRequestLine(data []byte) (RequestLine, int, error) {
 		return RequestLine{}, 0, nil
 	}
 
-	lines := strings.Split(string(data), "\r\n")
-	line := lines[0]
+	// Agafem fins el primer CRLF que trobem
+	i := strings.Index(string(data), "\r\n")
+	line := string(data[:i])
 
 	rl := RequestLine{}
 	numBytes := len(line)
-
 	parts := strings.Split(line, " ")
 
 	if len(parts) != 3 {
@@ -134,9 +136,28 @@ func (r *Request) parse(data []byte) (int, error) {
 	// It accepts the next slice of bytes that needs to be parsed into the Request struct
 	// It updates the "state" of the parser, and the parsed RequestLine field.
 	// It returns the number of bytes it consumed (meaning successfully parsed) and an error if it encountered one.
+	totalBytesParsed := 0
+	for r.State != requestStateDone {
+		n, err := r.parseSingle(data[totalBytesParsed:])
 
+		if err != nil {
+			return n, err
+		}
+
+		if n == 0 {
+			return totalBytesParsed, nil
+		}
+
+		totalBytesParsed += n
+	}
+
+	return totalBytesParsed, nil
+
+}
+
+func (r *Request) parseSingle(data []byte) (int, error) {
 	switch r.State {
-	case StateInitialized:
+	case requestStateInitialized:
 		// If the state of the parser is "initialized", it should call parseRequestLine.
 		rl, n, err := parseRequestLine(data)
 
@@ -150,13 +171,33 @@ func (r *Request) parse(data []byte) (int, error) {
 			return 0, nil
 		}
 
-		// If bytes are consumed successfully, it should update the .RequestLine field and change the state to "done".
+		// If bytes are consumed successfully, it should update the .RequestLine field
 		r.RequestLine = rl
-		r.State = StateDone
+		r.State = requestStateParsingHeaders
 
-		return n, nil
+		return n + 2, nil // +2 per CRLF
 
-	case StateDone:
+	case requestStateParsingHeaders:
+		totalParsed := 0
+		for {
+			n, done, err := r.Headers.Parse(data[totalParsed:])
+			totalParsed += n
+
+			if err != nil {
+				return totalParsed, err
+			}
+
+			if done {
+				r.State = requestStateDone
+				return totalParsed, nil
+			}
+
+			if n == 0 {
+				return totalParsed, nil
+			}
+		}
+
+	case requestStateDone:
 		// If the state of the parser is "done", it should return an error that says something like "error: trying to read data in a done state"
 		return 0, fmt.Errorf("trying to read data in a done state")
 
