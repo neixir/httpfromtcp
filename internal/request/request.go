@@ -3,6 +3,7 @@ package request
 import (
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
 
 	"github.com/neixir/httpfromtcp/internal/headers"
@@ -15,11 +16,13 @@ const (
 	requestStateInitialized int = iota
 	requestStateDone
 	requestStateParsingHeaders
+	requestStateParsingBody
 )
 
 type Request struct {
 	RequestLine RequestLine
 	Headers     headers.Headers
+	Body        []byte
 	State       int
 }
 
@@ -61,7 +64,32 @@ func RequestFromReader(reader io.Reader) (*Request, error) {
 		n, err := reader.Read(buf[readToIndex:])
 
 		// If you hit the end of the reader (io.EOF) set the state to "done" and break out of the loop.
+		// No ha resultat ser tan facil...
 		if err == io.EOF {
+			// First let the parser process anything left in the buffer
+			if readToIndex > 0 {
+				_, err = r.parse(buf[:readToIndex])
+				if err != nil {
+					return nil, err
+				}
+			}
+
+			// FINAL call, with truly empty data and truly at end
+			_, err = r.parse([]byte{})
+			if err != nil {
+				return nil, err
+			}
+
+			// Only now do we check for an incomplete body!
+			contentLength := r.Headers.Get("Content-Length")
+			if contentLength != "" {
+				length, _ := strconv.Atoi(contentLength)
+				if len(r.Body) < length {
+					return nil, fmt.Errorf("actual length is smaller than Content-Length (%d < %d)\nBody: [%s]",
+						len(r.Body), length, string(r.Body))
+				}
+			}
+
 			r.State = requestStateDone
 			break
 		}
@@ -158,7 +186,7 @@ func (r *Request) parse(data []byte) (int, error) {
 func (r *Request) parseSingle(data []byte) (int, error) {
 	switch r.State {
 	case requestStateInitialized:
-		// If the state of the parser is "initialized", it should call parseRequestLine.
+		// If the state of the parser is "initialized", it should call qquestLine.
 		rl, n, err := parseRequestLine(data)
 
 		// If there is an error, it should just return the error.
@@ -188,7 +216,7 @@ func (r *Request) parseSingle(data []byte) (int, error) {
 			}
 
 			if done {
-				r.State = requestStateDone
+				r.State = requestStateParsingBody
 				return totalParsed, nil
 			}
 
@@ -196,6 +224,49 @@ func (r *Request) parseSingle(data []byte) (int, error) {
 				return totalParsed, nil
 			}
 		}
+
+	case requestStateParsingBody:
+		// If there isn't a Content-Length header, move to the done state, nothing to parse
+		contentLength := r.Headers.Get("Content-Length")
+		if contentLength == "" {
+			r.State = requestStateDone
+			return 0, nil
+		}
+
+		length, err := strconv.Atoi(contentLength)
+		if err != nil {
+			// r.State = requestStateDone
+			return 0, fmt.Errorf("invalid Content-Length")
+		}
+
+		// Figure out how many bytes you still need
+		remaining := length - len(r.Body)
+
+		// If there's more data than you need, only take as much as you need to hit Content-Length.
+		toCopy := data
+		if len(data) > remaining {
+			toCopy = data[:remaining]
+		}
+
+		// Append the right number of bytes from data onto r.Body.
+		r.Body = append(r.Body, toCopy...)
+
+		// If you grabbed extra bytes from data, remember to return the right number (so the rest can be processed next).
+
+		// After appending, if len(r.Body) is equal to length, you’re done!
+		if len(r.Body) == length {
+			r.State = requestStateDone
+			return len(toCopy), nil
+		}
+
+		// If len(r.Body) is more than length, that’s an error.
+		if len(r.Body) > length {
+			return len(toCopy), fmt.Errorf("actual length is greater than Content-Length (%d > %d)\nBody: [%s]",
+				len(r.Body), length, string(r.Body))
+		}
+
+		// If less, you need to wait for more data.
+		return len(toCopy), nil
 
 	case requestStateDone:
 		// If the state of the parser is "done", it should return an error that says something like "error: trying to read data in a done state"
@@ -205,4 +276,6 @@ func (r *Request) parseSingle(data []byte) (int, error) {
 		// If the state is anything else, it should return an error that says something like "error: unknown state"
 		return 0, fmt.Errorf("unknown state")
 	}
+
+	return 0, nil
 }

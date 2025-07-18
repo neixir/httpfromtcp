@@ -88,7 +88,6 @@ func TestRequestLineParse(t *testing.T) {
 }
 
 func TestHeadersParse(t *testing.T) {
-	/* HEADERS */
 	// Test: Standard Headers
 	reader := &chunkReader{
 		data:            "GET / HTTP/1.1\r\nHost: localhost:42069\r\nUser-Agent: curl/7.81.0\r\nAccept: */*\r\n\r\n",
@@ -106,10 +105,11 @@ func TestHeadersParse(t *testing.T) {
 		data:            "GET / HTTP/1.1\r\nHost localhost:42069\r\n\r\n",
 		numBytesPerRead: 3,
 	}
-	r, err = RequestFromReader(reader)
+	_, err = RequestFromReader(reader)
 	require.Error(t, err)
 
-	// Add some more cases of your own to test for various edge cases with the headers. Here are the names of some of my additional test cases:
+	// Add some more cases of your own to test for various edge cases with the headers.
+	// Here are the names of some of my additional test cases:
 
 	// "Standard Headers"
 	// "Empty Headers"
@@ -117,6 +117,43 @@ func TestHeadersParse(t *testing.T) {
 	// "Duplicate Headers"
 	// "Case Insensitive Headers"
 	// "Missing End of Headers"
+
+}
+
+func TestBodyParse(t *testing.T) {
+	// Test: Standard Body
+	reader := &chunkReader{
+		data: "POST /submit HTTP/1.1\r\n" +
+			"Host: localhost:42069\r\n" +
+			"Content-Length: 13\r\n" +
+			"\r\n" +
+			"hello world!\n",
+		numBytesPerRead: 3,
+	}
+	r, err := RequestFromReader(reader)
+	require.NoError(t, err)
+	require.NotNil(t, r)
+	assert.Equal(t, "hello world!\n", string(r.Body))
+
+	// Test: Body shorter than reported content length
+	reader = &chunkReader{
+		data: "POST /submit HTTP/1.1\r\n" +
+			"Host: localhost:42069\r\n" +
+			"Content-Length: 20\r\n" +
+			"\r\n" +
+			"partial content",
+		numBytesPerRead: 3,
+	}
+	_, err = RequestFromReader(reader)
+	require.Error(t, err)
+
+	// Add some more test cases. Here are the names of some of my additional test cases:
+
+	// "Standard Body" (valid)
+	// "Empty Body, 0 reported content length" (valid)
+	// "Empty Body, no reported content length" (valid)
+	// "Body shorter than reported content length" (should error)
+	// "No Content-Length but Body Exists" (shouldn't error, we're assuming Content-Length will be present if a body exists)
 
 }
 

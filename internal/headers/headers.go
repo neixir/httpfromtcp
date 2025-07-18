@@ -89,6 +89,23 @@ func (h Headers) Parse(data []byte) (n int, done bool, err error) {
 	return consumed, false, nil
 }
 
+// Add a new .Get method to the Headers struct, it should take a key
+// and return the value for that key, keeping case insensitivity in mind.
+// No diu res de tornar error, aixi que de moment no ho fem.
+func (h Headers) Get(key string) (value string) {
+	key = strings.ToLower(key)
+	return h[key]
+	/*
+		value, ok := h[key]
+
+		if ok {
+			return value
+		} else {
+			return ""
+		}
+	*/
+}
+
 // Aquesta funcio s'utilitza als test pero no explica com ha de ser. A veure...
 func NewHeaders() Headers {
 	return make(Headers)
