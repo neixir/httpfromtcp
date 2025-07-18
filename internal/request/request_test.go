@@ -147,12 +147,11 @@ func TestBodyParse(t *testing.T) {
 	_, err = RequestFromReader(reader)
 	require.Error(t, err)
 
-	// Add some more test cases. Here are the names of some of my additional test cases:
+	// Add some more test cases.
 
 	// "Standard Body" (valid)
 	// "Empty Body, 0 reported content length" (valid)
 	// "Empty Body, no reported content length" (valid)
-	// "Body shorter than reported content length" (should error)
 	// "No Content-Length but Body Exists" (shouldn't error, we're assuming Content-Length will be present if a body exists)
 
 }
