@@ -277,5 +277,4 @@ func (r *Request) parseSingle(data []byte) (int, error) {
 		return 0, fmt.Errorf("unknown state")
 	}
 
-	return 0, nil
 }
