@@ -5,6 +5,8 @@ import (
 	"log"
 	"net"
 	"sync/atomic"
+
+	"github.com/neixir/httpfromtcp/internal/response"
 )
 
 // Contains the state of the server
@@ -61,16 +63,18 @@ func (s *Server) listen() {
 	}
 }
 
-// Handles a single connection by writing the following response and then closing the connection:
-/*
-HTTP/1.1 200 OK
-Content-Type: text/plain
-
-Hello World!
-*/
+// Handles a single connection by writing the response and then closing the connection
 func (s *Server) handle(conn net.Conn) {
 	defer conn.Close()
-	defaultResponse := []byte("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\nHello World!")
+	defaultBody := []byte("")
 
-	conn.Write(defaultResponse)
+	// Status line (HTTP/1.1 200 OK)
+	response.WriteStatusLine(conn, response.StatusOk)
+
+	// Headers
+	headers := response.GetDefaultHeaders(len(defaultBody))
+	response.WriteHeaders(conn, headers)
+
+	// Body
+	conn.Write(defaultBody)
 }
