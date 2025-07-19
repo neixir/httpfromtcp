@@ -1,11 +1,14 @@
 package server
 
 import (
+	"bytes"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"sync/atomic"
 
+	"github.com/neixir/httpfromtcp/internal/request"
 	"github.com/neixir/httpfromtcp/internal/response"
 )
 
@@ -13,11 +16,19 @@ import (
 type Server struct {
 	Listener net.Listener
 	IsClosed atomic.Bool
+	Handler  HandlerFunc
+}
+
+type HandlerFunc func(w io.Writer, req *request.Request) *HandlerError
+
+type HandlerError struct {
+	StatusCode int
+	Message    string
 }
 
 // Creates a net.Listener and returns a new Server instance.
 // Starts listening for requests inside a goroutine.
-func Serve(port int) (*Server, error) {
+func Serve(port int, handler HandlerFunc) (*Server, error) {
 	l, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
 	if err != nil {
 		return nil, err
@@ -25,6 +36,7 @@ func Serve(port int) (*Server, error) {
 
 	server := Server{
 		Listener: l,
+		Handler:  handler,
 	}
 
 	go server.listen()
@@ -63,18 +75,61 @@ func (s *Server) listen() {
 	}
 }
 
-// Handles a single connection by writing the response and then closing the connection
 func (s *Server) handle(conn net.Conn) {
 	defer conn.Close()
-	defaultBody := []byte("")
 
-	// Status line (HTTP/1.1 200 OK)
+	// Parse the request from the connection
+	req, err := request.RequestFromReader(conn)
+	if err != nil {
+		fmt.Println(err)
+		// TODO De fet, envia 500 Bad Request
+		return
+	}
+
+	// Create a new empty bytes.Buffer for the handler to write to
+	var buf bytes.Buffer
+	// Ell te:
+	// buf := bytes.NewBuffer([]byte{})
+
+	// Call the handler function
+	handlerErr := s.Handler(&buf, req)
+
+	// If the handler errors, write the error to the connection
+	if handlerErr != nil {
+		WriteError(conn, *handlerErr)
+		// ell te:
+		//handlerErr.Write(conn)
+		return
+	}
+
+	// If the handler succeeds:
+
+	// Ell te:
+	// b := buf.Bytes()
+	// i ho fa servir on aqui tenim buf.Bytes()
+
+	// Write the status line
+	// HTTP/1.1 200 OK
 	response.WriteStatusLine(conn, response.StatusOk)
 
-	// Headers
-	headers := response.GetDefaultHeaders(len(defaultBody))
+	// Write the headers
+	headers := response.GetDefaultHeaders(len(buf.Bytes()))
 	response.WriteHeaders(conn, headers)
 
-	// Body
-	conn.Write(defaultBody)
+	// Write the response body from the handler's buffer
+	conn.Write(buf.Bytes())
+
+}
+
+// CH7 L5
+// https://www.boot.dev/lessons/d28c5dad-56da-45a7-8b4b-12ac65b1365e
+// Create some logic that writes a HandlerError to an io.Writer.
+// This will make it easy for us to keep our error handling consistent and DRY.
+func WriteError(w io.Writer, err HandlerError) {
+	response.WriteStatusLine(w, response.StatusCode(err.StatusCode))
+
+	headers := response.GetDefaultHeaders(len(err.Message))
+	response.WriteHeaders(w, headers)
+
+	w.Write([]byte(err.Message))
 }
