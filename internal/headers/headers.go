@@ -95,18 +95,13 @@ func (h Headers) Parse(data []byte) (n int, done bool, err error) {
 func (h Headers) Get(key string) (value string) {
 	key = strings.ToLower(key)
 	return h[key]
-	/*
-		value, ok := h[key]
-
-		if ok {
-			return value
-		} else {
-			return ""
-		}
-	*/
 }
 
 // Aquesta funcio s'utilitza als test pero no explica com ha de ser. A veure...
 func NewHeaders() Headers {
 	return make(Headers)
+}
+
+func OverwriteHeader(h Headers, key, value string) {
+	h[key] = value
 }

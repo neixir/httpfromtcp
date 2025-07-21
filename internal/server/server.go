@@ -3,7 +3,6 @@ package server
 import (
 	"bytes"
 	"fmt"
-	"io"
 	"log"
 	"net"
 	"sync/atomic"
@@ -19,7 +18,7 @@ type Server struct {
 	Handler  HandlerFunc
 }
 
-type HandlerFunc func(w io.Writer, req *request.Request) *HandlerError
+type HandlerFunc func(w *response.Writer, req *request.Request)
 
 type HandlerError struct {
 	StatusCode int
@@ -87,40 +86,26 @@ func (s *Server) handle(conn net.Conn) {
 	}
 
 	// Create a new empty bytes.Buffer for the handler to write to
-	var buf bytes.Buffer
-	// Ell te:
-	// buf := bytes.NewBuffer([]byte{})
+	var buf bytes.Buffer // Ell tenia: buf := bytes.NewBuffer([]byte{})
+	res := response.NewWriter(conn)
 
 	// Call the handler function
-	handlerErr := s.Handler(&buf, req)
-
-	// If the handler errors, write the error to the connection
-	if handlerErr != nil {
-		WriteError(conn, *handlerErr)
-		// ell te:
-		//handlerErr.Write(conn)
-		return
-	}
-
-	// If the handler succeeds:
-
-	// Ell te:
-	// b := buf.Bytes()
-	// i ho fa servir on aqui tenim buf.Bytes()
+	s.Handler(res, req)
 
 	// Write the status line
 	// HTTP/1.1 200 OK
-	response.WriteStatusLine(conn, response.StatusOk)
+	res.WriteStatusLine(response.StatusOk)
 
 	// Write the headers
 	headers := response.GetDefaultHeaders(len(buf.Bytes()))
-	response.WriteHeaders(conn, headers)
+	res.WriteHeaders(headers)
 
 	// Write the response body from the handler's buffer
-	conn.Write(buf.Bytes())
+	res.WriteBody(buf.Bytes())
 
 }
 
+/*
 // CH7 L5
 // https://www.boot.dev/lessons/d28c5dad-56da-45a7-8b4b-12ac65b1365e
 // Create some logic that writes a HandlerError to an io.Writer.
@@ -133,3 +118,4 @@ func WriteError(w io.Writer, err HandlerError) {
 
 	w.Write([]byte(err.Message))
 }
+*/

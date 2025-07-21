@@ -2,7 +2,7 @@ package response
 
 import (
 	"fmt"
-	"io"
+	"net"
 	"strconv"
 
 	"github.com/neixir/httpfromtcp/internal/headers"
@@ -17,26 +17,25 @@ const (
 	StatusInternalServerError StatusCode = 500
 )
 
-// It should map the given status code to the correct reason phrase, if it's one of the 3 that we support:
-// 200 should return HTTP/1.1 200 OK
-// 400 should return HTTP/1.1 400 Bad Request
-// 500 should return HTTP/1.1 500 Internal Server Error
-// Any other code should just leave the reason phrase blank.
-func WriteStatusLine(w io.Writer, statusCode StatusCode) error {
-	var err error = nil
+type WriterStatus int
 
-	switch statusCode {
-	case StatusOk:
-		_, err = w.Write([]byte("HTTP/1.1 200 OK\r\n"))
-	case StatusBadRequest:
-		_, err = w.Write([]byte("HTTP/1.1 400 Bad Request\r\n"))
-	case StatusInternalServerError:
-		_, err = w.Write([]byte("HTTP/1.1 500 Internal Server Error\r\n"))
-	default:
-		_, err = w.Write([]byte(fmt.Sprintf("HTTP/1.1 %d \r\n", statusCode)))
+const (
+	writerStateReadyForStatus WriterStatus = iota
+	writerStateReadyForHeaders
+	writerStateReadyForBody
+)
+
+type Writer struct {
+	conn         net.Conn
+	writerStatus WriterStatus
+}
+
+// In the response package
+func NewWriter(conn net.Conn) *Writer {
+	return &Writer{
+		conn:         conn,
+		writerStatus: writerStateReadyForStatus,
 	}
-
-	return err
 }
 
 // it should set the following headers that we always want to include in our responses:
@@ -53,21 +52,70 @@ func GetDefaultHeaders(contentLen int) headers.Headers {
 	return h
 }
 
-// Implement a func WriteHeaders(w io.Writer, headers headers.Headers) error that does exactly what you'd expect.
-func WriteHeaders(w io.Writer, headers headers.Headers) error {
-	for key, value := range headers {
-		_, err := w.Write([]byte(
-			fmt.Sprintf("%s: %s\r\n", key, value),
-		))
+// CH7 L7
+// It should map the given status code to the correct reason phrase, if it's one of the 3 that we support:
+// 200 should return HTTP/1.1 200 OK
+// 400 should return HTTP/1.1 400 Bad Request
+// 500 should return HTTP/1.1 500 Internal Server Error
+// Any other code should just leave the reason phrase blank.
+func (w *Writer) WriteStatusLine(statusCode StatusCode) error {
+	var err error = nil
+
+	if w.writerStatus == writerStateReadyForStatus {
+		switch statusCode {
+		case StatusOk:
+			_, err = w.conn.Write([]byte("HTTP/1.1 200 OK\r\n"))
+		case StatusBadRequest:
+			_, err = w.conn.Write([]byte("HTTP/1.1 400 Bad Request\r\n"))
+		case StatusInternalServerError:
+			_, err = w.conn.Write([]byte("HTTP/1.1 500 Internal Server Error\r\n"))
+		default:
+			_, err = w.conn.Write([]byte(fmt.Sprintf("HTTP/1.1 %d \r\n", statusCode)))
+		}
+
+		w.writerStatus = writerStateReadyForHeaders
+
+	} else {
+		return fmt.Errorf("response status line already sent")
+	}
+
+	return err
+
+}
+
+func (w *Writer) WriteHeaders(headers headers.Headers) error {
+	if w.writerStatus == writerStateReadyForHeaders {
+		for key, value := range headers {
+			_, err := w.conn.Write([]byte(
+				fmt.Sprintf("%s: %s\r\n", key, value),
+			))
+			if err != nil {
+				return err
+			}
+		}
+
+		_, err := w.conn.Write([]byte("\r\n"))
 		if err != nil {
 			return err
 		}
-	}
+		w.writerStatus = writerStateReadyForBody
 
-	_, err := w.Write([]byte("\r\n"))
-	if err != nil {
-		return err
+	} else {
+		return fmt.Errorf("response headers already sent")
 	}
 
 	return nil
+}
+
+func (w *Writer) WriteBody(p []byte) (int, error) {
+	if w.writerStatus == writerStateReadyForBody {
+		w.conn.Write(p)
+
+		w.writerStatus = writerStateReadyForStatus
+
+	} else {
+		return 0, fmt.Errorf("response body already sent")
+	}
+
+	return len(p), nil
 }
