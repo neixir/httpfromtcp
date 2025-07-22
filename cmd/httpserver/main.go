@@ -119,6 +119,45 @@ func Chapter8(w *response.Writer, req *request.Request) {
 
 }
 
+func Chapter9(w *response.Writer, req *request.Request) {
+	target := req.RequestLine.RequestTarget
+
+	if target != "/video" {
+		return
+	}
+
+	// Llegim el fitxer
+	data, err := os.ReadFile("assets/vim.mp4")
+	if err != nil {
+		log.Fatalf("error reading file: %v", err)
+	}
+
+	// Status Line
+	err = w.WriteStatusLine(response.StatusOk)
+	if err != nil {
+		log.Fatalf("error writing status line: %v", err)
+	}
+
+	// Be sure to remove the Content-Length header from the response,
+	resHeaders := response.GetDefaultHeaders(len(data))
+
+	headers.OverwriteHeader(resHeaders, "Content-Type", "video/mp4")
+
+	// and add the Transfer-Encoding: chunked header
+	// resHeaders["Transfer-Encoding"] = "chunked"
+
+	// Announce X-Content-SHA256 and X-Content-Length as trailers in the Trailer header.
+	// resHeaders["Trailer"] = "X-Content-SHA256, X-Content-Length"
+
+	err = w.WriteHeaders(resHeaders)
+	if err != nil {
+		log.Fatalf("error writing headers: %v", err)
+	}
+
+	w.WriteBody([]byte(data))
+
+}
+
 func sendHTMLResponse(w *response.Writer, status response.StatusCode, title, h1, msg string) {
 	htmlTemplate := `<html>
   <head>
@@ -141,7 +180,7 @@ func sendHTMLResponse(w *response.Writer, status response.StatusCode, title, h1,
 }
 
 func main() {
-	server, err := server.Serve(port, Chapter8)
+	server, err := server.Serve(port, Chapter9)
 	if err != nil {
 		log.Fatalf("Error starting server: %v", err)
 	}
