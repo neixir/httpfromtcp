@@ -143,12 +143,6 @@ func Chapter9(w *response.Writer, req *request.Request) {
 
 	headers.OverwriteHeader(resHeaders, "Content-Type", "video/mp4")
 
-	// and add the Transfer-Encoding: chunked header
-	// resHeaders["Transfer-Encoding"] = "chunked"
-
-	// Announce X-Content-SHA256 and X-Content-Length as trailers in the Trailer header.
-	// resHeaders["Trailer"] = "X-Content-SHA256, X-Content-Length"
-
 	err = w.WriteHeaders(resHeaders)
 	if err != nil {
 		log.Fatalf("error writing headers: %v", err)
