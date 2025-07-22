@@ -1,12 +1,14 @@
 package main
 
 import (
+	"crypto/sha256"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"syscall"
 
@@ -53,7 +55,7 @@ func Chapter8(w *response.Writer, req *request.Request) {
 	// Use n as your chunk size and write that chunk data back to the client as soon as you get it from httpbin.org.
 	httpbinResponse, err := http.Get(httpbinUrl)
 	if err != nil {
-		// TODO Send error? Log error?
+		log.Fatalf("error getting httpbin: %v", err)
 	}
 
 	defer httpbinResponse.Body.Close()
@@ -61,7 +63,7 @@ func Chapter8(w *response.Writer, req *request.Request) {
 	// Status Line
 	err = w.WriteStatusLine(response.StatusCode(httpbinResponse.StatusCode)) // response.StatusOk)
 	if err != nil {
-		// TODO Send error? Log error?
+		log.Fatalf("error writing status line: %v", err)
 	}
 
 	// Be sure to remove the Content-Length header from the response,
@@ -72,28 +74,44 @@ func Chapter8(w *response.Writer, req *request.Request) {
 		}
 	}
 
-	// and add the Transfer-Encoding: chunked header.
+	// and add the Transfer-Encoding: chunked header
 	resHeaders["Transfer-Encoding"] = "chunked"
+
+	// Announce X-Content-SHA256 and X-Content-Length as trailers in the Trailer header.
+	resHeaders["Trailer"] = "X-Content-SHA256, X-Content-Length"
 
 	err = w.WriteHeaders(resHeaders)
 	if err != nil {
-		// TODO Send error? Log error?
+		log.Fatalf("error writing headers: %v", err)
 	}
 
 	buf := make([]byte, 1024)
+	fullbody := []byte{}
+	// fullbodyLength := 0
+
 	for {
 		n, err := httpbinResponse.Body.Read(buf)
 
 		if err == io.EOF {
-			w.WriteChunkedBodyDone()
+			hash := sha256.Sum256([]byte(fullbody))
+			trailers := headers.Headers{ //map[string]string{
+				"X-Content-SHA256": fmt.Sprintf("%x", hash),
+				"X-Content-Length": strconv.Itoa(len(fullbody)),
+			}
+
+			w.WriteChunkedBodyDone(trailers)
 			break
 		}
 
 		if err != nil {
-			// TODO Send error? Log error?
+			log.Fatalf("error reading chunk: %v", err)
 		}
 
 		if n > 0 {
+			// Keep track of the full response body as you read it in chunks from the httpbin server
+			fullbody = append(fullbody, buf[:n]...)
+			// fullbodyLength += n
+
 			// fmt.Printf("Chunk of %d bytes\n", n)
 			w.WriteChunkedBody(buf[:n]) // :n pq el buffer tindra coses velles i potser no l'omplim
 		}

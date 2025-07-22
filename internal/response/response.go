@@ -143,8 +143,14 @@ func (w *Writer) WriteChunkedBody(p []byte) (int, error) {
 
 }
 
-func (w *Writer) WriteChunkedBodyDone() (int, error) {
-	body := "0\r\n\r\n"
+func (w *Writer) WriteChunkedBodyDone(trailer headers.Headers) (int, error) {
+
+	trailerLines := ""
+	for key, value := range trailer {
+		trailerLines += fmt.Sprintf("%s: %s\r\n", key, value)
+	}
+
+	body := fmt.Sprintf("0\r\n%s\r\n", trailerLines)
 
 	n, err := w.WriteBody([]byte(body))
 	if err != nil {
@@ -154,4 +160,10 @@ func (w *Writer) WriteChunkedBodyDone() (int, error) {
 	w.isChunked = false
 
 	return len(body), nil
+}
+
+// Add a new method to your response package that does what you'd expect
+// based on your knowledge of trailers.
+func (w *Writer) WriteTrailers(h headers.Headers) error {
+	return nil
 }
