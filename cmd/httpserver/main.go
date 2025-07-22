@@ -2,9 +2,12 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"log"
+	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 
 	"github.com/neixir/httpfromtcp/internal/headers"
@@ -15,7 +18,6 @@ import (
 
 const port = 42069
 
-// type HandlerFunc func(w *response.Writer, req *request.Request)
 func Chapter7(w *response.Writer, req *request.Request) {
 	target := req.RequestLine.RequestTarget
 
@@ -29,10 +31,72 @@ func Chapter7(w *response.Writer, req *request.Request) {
 	case "/myproblem":
 		sendHTMLResponse(w, response.StatusInternalServerError, "500 Internal Server Error", "Internal Server Error", "Okay, you know what? This one is on me.")
 
-		// Otherwise...?
-		// default:
-		// 	w.Write([]byte("All good, frfr\n"))
+	}
+}
 
+// Add a new proxy handler to your server that maps /httpbin/x to https://httpbin.org/x,
+// supporting both proxying and chunked responsing.
+func Chapter8(w *response.Writer, req *request.Request) {
+	target := req.RequestLine.RequestTarget
+
+	// I used the strings.HasPrefix and strings.TrimPrefix functions to handle routing and route parsing.
+	if !strings.HasPrefix(target, "/httpbin") {
+		return
+	}
+
+	path := strings.TrimPrefix(target, "/httpbin")
+	httpbinUrl := fmt.Sprint("https://httpbin.org", path)
+
+	// I used http.Get to make the request to httpbin.org and httpbinResponse.Body.Read to read the response body.
+	// I used a buffer size of 1024 bytes, and then printed n on every call to Read so that I could see
+	// how much data was being read.
+	// Use n as your chunk size and write that chunk data back to the client as soon as you get it from httpbin.org.
+	httpbinResponse, err := http.Get(httpbinUrl)
+	if err != nil {
+		// TODO Send error? Log error?
+	}
+
+	defer httpbinResponse.Body.Close()
+
+	// Status Line
+	err = w.WriteStatusLine(response.StatusCode(httpbinResponse.StatusCode)) // response.StatusOk)
+	if err != nil {
+		// TODO Send error? Log error?
+	}
+
+	// Be sure to remove the Content-Length header from the response,
+	resHeaders := make(headers.Headers)
+	for key, values := range httpbinResponse.Header {
+		if strings.ToLower(key) != "content-length" {
+			resHeaders[key] = strings.Join(values, ", ") // pq values es un array de strings
+		}
+	}
+
+	// and add the Transfer-Encoding: chunked header.
+	resHeaders["Transfer-Encoding"] = "chunked"
+
+	err = w.WriteHeaders(resHeaders)
+	if err != nil {
+		// TODO Send error? Log error?
+	}
+
+	buf := make([]byte, 1024)
+	for {
+		n, err := httpbinResponse.Body.Read(buf)
+
+		if err == io.EOF {
+			w.WriteChunkedBodyDone()
+			break
+		}
+
+		if err != nil {
+			// TODO Send error? Log error?
+		}
+
+		if n > 0 {
+			// fmt.Printf("Chunk of %d bytes\n", n)
+			w.WriteChunkedBody(buf[:n]) // :n pq el buffer tindra coses velles i potser no l'omplim
+		}
 	}
 
 }
@@ -59,7 +123,7 @@ func sendHTMLResponse(w *response.Writer, status response.StatusCode, title, h1,
 }
 
 func main() {
-	server, err := server.Serve(port, Chapter7)
+	server, err := server.Serve(port, Chapter8)
 	if err != nil {
 		log.Fatalf("Error starting server: %v", err)
 	}

@@ -1,7 +1,6 @@
 package server
 
 import (
-	"bytes"
 	"fmt"
 	"log"
 	"net"
@@ -86,36 +85,9 @@ func (s *Server) handle(conn net.Conn) {
 	}
 
 	// Create a new empty bytes.Buffer for the handler to write to
-	var buf bytes.Buffer // Ell tenia: buf := bytes.NewBuffer([]byte{})
 	res := response.NewWriter(conn)
 
 	// Call the handler function
 	s.Handler(res, req)
 
-	// Write the status line
-	// HTTP/1.1 200 OK
-	res.WriteStatusLine(response.StatusOk)
-
-	// Write the headers
-	headers := response.GetDefaultHeaders(len(buf.Bytes()))
-	res.WriteHeaders(headers)
-
-	// Write the response body from the handler's buffer
-	res.WriteBody(buf.Bytes())
-
 }
-
-/*
-// CH7 L5
-// https://www.boot.dev/lessons/d28c5dad-56da-45a7-8b4b-12ac65b1365e
-// Create some logic that writes a HandlerError to an io.Writer.
-// This will make it easy for us to keep our error handling consistent and DRY.
-func WriteError(w io.Writer, err HandlerError) {
-	response.WriteStatusLine(w, response.StatusCode(err.StatusCode))
-
-	headers := response.GetDefaultHeaders(len(err.Message))
-	response.WriteHeaders(w, headers)
-
-	w.Write([]byte(err.Message))
-}
-*/
